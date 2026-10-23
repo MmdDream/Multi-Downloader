@@ -1,0 +1,65 @@
+
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Get repository files
+        uses: actions/checkout@v4
+
+      - name: Extract Flutter project ZIP
+        run: |
+          mkdir source
+          unzip -o multi_downloader.zip -d source
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android project
+        run: flutter create --org com.multidl --project-name multi_downloader --platforms=android app
+
+      - name: Copy project files
+        run: |
+          cp -r source/lib app/
+          cp source/pubspec.yaml app/pubspec.yaml
+          cp -r source/assets app/
+          cp -r source/android_setup/android/. app/android/
+
+      - name: Install packages
+        working-directory: app
+        run: flutter pub get
+
+      - name: Generate app icons
+        working-directory: app
+        run: dart run flutter_launcher_icons
+
+      - name: Build APK
+        working-directory: app
+        run: flutter build apk --release --split-per-abi
+
+      - name: Upload APK files
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-downloader-apk
+          path: app/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
