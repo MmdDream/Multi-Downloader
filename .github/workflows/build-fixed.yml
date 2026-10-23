@@ -1,0 +1,70 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract project source ZIP
+        run: unzip -o multi_downloader.zip -d .
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Pin Flutter to avoid the AGP 9.0 DSL deprecation errors in this project.
+          flutter-version: "3.35.7"
+          cache: true
+
+      - name: Create Flutter project shell
+        run: flutter create --org com.multidl --project-name multi_downloader --platforms=android,windows app
+
+      - name: Copy project sources and Android setup
+        run: |
+          cp -r lib app/
+          cp pubspec.yaml app/pubspec.yaml
+          cp -r assets app/
+          cp -r android_setup/android/. app/android/
+
+      - name: Install packages
+        working-directory: app
+        run: flutter pub get
+
+      - name: Generate launcher icons
+        working-directory: app
+        run: dart run flutter_launcher_icons
+
+      - name: Build release APKs
+        working-directory: app
+        run: flutter build apk --release --split-per-abi
+
+      - name: Upload APKs as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-downloader-apk
+          path: app/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+
+          files: app/build/app/outputs/flutter-apk/*.apk
